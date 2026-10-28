@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -20,7 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +34,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.tecsup.lab10.data.PostApiService
+import com.tecsup.lab10.data.PostModel
 import com.tecsup.lab10.data.SerieApiService
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -46,13 +51,25 @@ fun SeriesApp() {
             .build()
             .create(SerieApiService::class.java)
     }
+    // API online para el ejercicio
+    val urlPosts = "https://jsonplaceholder.typicode.com/"
+    val servicioPosts = remember {
+        Retrofit.Builder()
+            .baseUrl(urlPosts)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(PostApiService::class.java)
+    }
+    val listaPosts = remember { mutableStateListOf<PostModel>() }
     val navController = rememberNavController()
 
     Scaffold(
         topBar = { BarraSuperior() },
         bottomBar = { BarraInferior(navController) },
         floatingActionButton = { BotonFAB(navController) },
-        content = { paddingValues -> Contenido(paddingValues, navController, servicio) }
+        content = { paddingValues ->
+            Contenido(paddingValues, navController, servicio, servicioPosts, listaPosts)
+        }
     )
 }
 
@@ -60,11 +77,16 @@ fun SeriesApp() {
 fun BotonFAB(navController: NavHostController) {
     val cbeState by navController.currentBackStackEntryAsState()
     val rutaActual = cbeState?.destination?.route
-    if (rutaActual == "series") {
+    val rutaNuevo = when (rutaActual) {
+        "series" -> "serieNuevo"
+        "posts" -> "postNuevo"
+        else -> null
+    }
+    if (rutaNuevo != null) {
         FloatingActionButton(
             containerColor = Color.Magenta,
             contentColor = Color.White,
-            onClick = { navController.navigate("serieNuevo") }
+            onClick = { navController.navigate(rutaNuevo) }
         ) {
             Icon(imageVector = Icons.Filled.Add, contentDescription = "Agregar")
         }
@@ -105,6 +127,12 @@ fun BarraInferior(navController: NavHostController) {
             selected = rutaActual == "series",
             onClick = { navController.navigate("series") { launchSingleTop = true } }
         )
+        NavigationBarItem(
+            icon = { Icon(Icons.Outlined.Email, contentDescription = "Posts") },
+            label = { Text("Posts") },
+            selected = rutaActual == "posts",
+            onClick = { navController.navigate("posts") { launchSingleTop = true } }
+        )
     }
 }
 
@@ -112,7 +140,9 @@ fun BarraInferior(navController: NavHostController) {
 fun Contenido(
     pv: PaddingValues,
     navController: NavHostController,
-    servicio: SerieApiService
+    servicio: SerieApiService,
+    servicioPosts: PostApiService,
+    listaPosts: SnapshotStateList<PostModel>
 ) {
     Box(
         modifier = Modifier
@@ -124,6 +154,8 @@ fun Contenido(
             startDestination = "inicio"
         ) {
             composable("inicio") { ScreenInicio() }
+
+            // Series: API Django
             composable("series") { ContenidoSeriesListado(navController, servicio) }
             composable("serieNuevo") { ContenidoSerieEditar(navController, servicio, 0) }
             composable(
@@ -137,6 +169,22 @@ fun Contenido(
                 arguments = listOf(navArgument("id") { type = NavType.IntType })
             ) {
                 ContenidoSerieEliminar(navController, servicio, it.arguments!!.getInt("id"))
+            }
+
+            // Posts: API online JSONPlaceholder
+            composable("posts") { ContenidoPostsListado(navController, servicioPosts, listaPosts) }
+            composable("postNuevo") { ContenidoPostEditar(navController, servicioPosts, listaPosts, 0) }
+            composable(
+                "postVer/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
+            ) {
+                ContenidoPostEditar(navController, servicioPosts, listaPosts, it.arguments!!.getInt("id"))
+            }
+            composable(
+                "postDel/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
+            ) {
+                ContenidoPostEliminar(navController, servicioPosts, listaPosts, it.arguments!!.getInt("id"))
             }
         }
     }
